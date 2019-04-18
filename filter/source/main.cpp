@@ -9,13 +9,19 @@ using Element = int;
 constexpr auto block_num_bytes = std::size_t{64};
 constexpr auto element_block_size = block_num_bytes / sizeof(Element);
 
+template<typename Type>
+class alignas(64) CacheAlignedAtomic : public std::atomic<Type>
+{
+
+};
+
 auto program = [](const std::size_t num_threads, const std::size_t thread_id, const std::vector<Element>& input, std::vector<Element>& output, const Element filter_max, const std::size_t num_iterations) -> std::size_t
 {
-	static std::atomic<bool> operation_done;
-	static std::atomic<std::size_t> threads_waiting_on_initialized;
-	static std::atomic<bool> operation_initialized;
-	static std::vector<std::size_t> subarray_ends(num_threads);
-	static std::vector<std::atomic<bool>> joins(num_threads - 1);
+	alignas(block_num_bytes) static std::atomic<bool> operation_done;
+	alignas(block_num_bytes) static std::atomic<std::size_t> threads_waiting_on_initialized;
+	alignas(block_num_bytes) static std::atomic<bool> operation_initialized;
+	alignas(block_num_bytes) static std::vector<std::size_t> subarray_ends(num_threads);
+	alignas(block_num_bytes) static std::vector<CacheAlignedAtomic<bool>> joins(num_threads - 1);
 
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
 	{		
