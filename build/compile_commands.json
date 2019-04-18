@@ -1,0 +1,7 @@
+[
+{
+  "directory": "d:/Dropbox/Software Projects/tests/multithreading-tests/build",
+  "command": "C:\\PROGRA~2\\MICROS~2\\2017\\COMMUN~1\\VC\\Tools\\MSVC\\1416~1.270\\bin\\Hostx64\\x64\\cl.exe  /nologo /TP -DMULTITHREADING -I..\\filter\\include  /DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O2 /Ob2 /DNDEBUG   -std:c++17 /Fofilter\\CMakeFiles\\multithreading-filter-test.dir\\source\\main.cpp.obj /FdTARGET_COMPILE_PDB /FS -c \"D:\\Dropbox\\Software Projects\\tests\\multithreading-tests\\filter\\source\\main.cpp\"",
+  "file": "D:/Dropbox/Software Projects/tests/multithreading-tests/filter/source/main.cpp"
+}
+]
