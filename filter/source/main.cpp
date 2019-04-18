@@ -15,13 +15,96 @@ class alignas(64) CacheAlignedAtomic : public std::atomic<Type>
 
 };
 
-auto program = [](const std::size_t num_threads, const std::size_t thread_id, const std::vector<Element>& input, std::vector<Element>& output, const Element filter_max, const std::size_t num_iterations) -> std::size_t
+template<typename Type>
+struct alignas(64) CacheAlignedNumber
+{
+	CacheAlignedNumber() = default;
+	constexpr CacheAlignedNumber(const Type value) noexcept : value{value}
+	{
+
+	}
+	constexpr operator Type() const noexcept
+	{
+		return value;
+	}
+	constexpr operator Type&() noexcept
+	{
+		return value;
+	}
+
+	Type value;
+};
+
+class GenericAllocator
+{
+public:
+	GenericAllocator()
+	{
+
+	}
+
+	static char* allocate(const std::size_t size) noexcept
+	{
+		const auto block_size = (size + block_num_bytes - 1) / block_num_bytes * block_num_bytes;
+		
+		return reinterpret_cast<char*>(new Block[block_size]);
+	}
+	static void deallocate(char*const allocation, const std::size_t size) noexcept
+	{
+		delete[] reinterpret_cast<Block*>(allocation);
+	}
+
+private:
+	struct Block
+	{
+		alignas(block_num_bytes) char bytes[block_num_bytes];
+	};
+};
+
+template<typename Type>
+class Allocator
+{
+public:
+	using value_type = Type;
+
+	Allocator() = default;
+	template<typename Type>
+	constexpr Allocator(const Allocator<Type>&) noexcept
+	{
+
+	}
+
+	template<typename Type>
+	constexpr bool operator==(const Allocator<Type>&) const noexcept
+	{
+		return true;
+	}
+	template<typename Type>
+	constexpr bool operator!=(const Allocator<Type>&) const noexcept
+	{
+		return false;
+	}
+	
+	Type* allocate(const std::size_t size) noexcept
+	{
+		return reinterpret_cast<Type*>(GenericAllocator::allocate(size));
+	}
+	void deallocate(Type*const allocation, const std::size_t size) noexcept
+	{
+		GenericAllocator::deallocate(reinterpret_cast<char*>(allocation), size);
+	}
+};
+
+template<typename Type>
+using DynamicArray = std::vector<Type, Allocator<Type>>;
+
+auto program = [](const std::size_t num_threads, const std::size_t thread_id, const DynamicArray<Element>& input, DynamicArray<Element>& output, const Element filter_max, const std::size_t num_iterations) -> std::size_t
 {
 	alignas(block_num_bytes) static std::atomic<bool> operation_done;
 	alignas(block_num_bytes) static std::atomic<std::size_t> threads_waiting_on_initialized;
 	alignas(block_num_bytes) static std::atomic<bool> operation_initialized;
-	alignas(block_num_bytes) static std::vector<std::size_t> subarray_ends(num_threads);
-	alignas(block_num_bytes) static std::vector<CacheAlignedAtomic<bool>> joins(num_threads - 1);
+	alignas(block_num_bytes) static DynamicArray<CacheAlignedNumber<std::size_t>> subarray_ends(num_threads);
+	alignas(block_num_bytes) static DynamicArray<CacheAlignedAtomic<bool>> joins(num_threads - 1);
 
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
 	{		
@@ -64,10 +147,10 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 						return;
 					}
 
-					const auto lower_end_index = subarray_ends[lower_id];
+					const auto lower_end_index = subarray_ends[lower_id].value;
 					const auto upper_starting_block = (num_blocks * upper_id) / num_threads;
 					const auto upper_begin_index = upper_starting_block * element_block_size;
-					const auto upper_end_index = subarray_ends[upper_id];
+					const auto upper_end_index = subarray_ends[upper_id].value;
 					const auto upper_size = upper_end_index - upper_begin_index;
 					subarray_ends[lower_id] = lower_end_index + upper_size;
 					for(auto write_index = lower_end_index, read_index = upper_begin_index, end = lower_end_index + upper_size; write_index < end; ++write_index, ++read_index)
@@ -113,7 +196,7 @@ int main(int num_arguments, const char*const*const arguments)
 	constexpr auto filter_max = Element{6700};
 	constexpr auto seed = std::size_t{9879565};
 
-	auto input = std::vector<Element>{};
+	auto input = DynamicArray<Element>{};
 
 	auto rng_engine = std::mt19937_64{seed};
 	const auto random_int = std::uniform_int_distribution<Element>{min_value, max_value};
@@ -124,12 +207,12 @@ int main(int num_arguments, const char*const*const arguments)
 		input[index] = random_int(rng_engine);
 	}
 
-	auto output = std::vector<Element>(input.size());
+	auto output = DynamicArray<Element>(input.size());
 
 #if defined MULTITHREADING
 	const std::size_t num_threads = std::thread::hardware_concurrency();
 
-	auto threads = std::vector<std::thread>{};
+	auto threads = DynamicArray<std::thread>{};
 	threads.reserve(num_threads - 1);
 #endif
 
