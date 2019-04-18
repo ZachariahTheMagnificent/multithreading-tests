@@ -15,7 +15,7 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 	static std::atomic<std::size_t> threads_waiting_on_initialized;
 	static std::atomic<bool> operation_initialized;
 	static std::vector<std::size_t> subarray_ends(num_threads);
-	static std::atomic<std::size_t> join_count;
+	static std::vector<std::atomic<bool>> joins(num_threads - 1);
 
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
 	{		
@@ -39,27 +39,38 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 		
 		[thread_id, num_threads, &input, &output, num_blocks]
 		{
-			if(join_count.fetch_add(1, std::memory_order_acq_rel) != num_threads - 1)
+			for(auto pair_size = std::size_t{2}, displacement = std::size_t{}; (num_threads + pair_size/2 - 1) / pair_size != 0; displacement += (num_threads + pair_size/2 - 1) / pair_size, pair_size *= 2)
 			{
-				while(!operation_done.load(std::memory_order_acquire))
+				const auto pair_index = thread_id / pair_size;
+				const auto lower_id = pair_index * pair_size;
+				const auto upper_id = lower_id + pair_size/2;
+				
+				if(upper_id < num_threads)
 				{
-				}
-				return;
-			}
-			auto output_index = subarray_ends.front();
-			for(auto index = 1; index < num_threads; ++index)
-			{
-				const auto upper_starting_block = (num_blocks * index) / num_threads;
-				const auto upper_begin_index = upper_starting_block * element_block_size;
-				const auto upper_end_index = subarray_ends[index];
-				const auto upper_size = upper_end_index - upper_begin_index;
-				for(auto read_index = upper_begin_index, end = output_index + upper_size; output_index < end; ++output_index, ++read_index)
-				{
-					output[output_index] = output[read_index];
+					const auto join_flag_id = displacement + pair_index;
+
+					// if we don't join
+					if(!joins[join_flag_id].exchange(true, std::memory_order_acq_rel))
+					{
+						while(!operation_done.load(std::memory_order_acquire))
+						{
+						}
+						return;
+					}
+
+					const auto lower_end_index = subarray_ends[lower_id];
+					const auto upper_starting_block = (num_blocks * upper_id) / num_threads;
+					const auto upper_begin_index = upper_starting_block * element_block_size;
+					const auto upper_end_index = subarray_ends[upper_id];
+					const auto upper_size = upper_end_index - upper_begin_index;
+					subarray_ends[lower_id] = lower_end_index + upper_size;
+					for(auto write_index = lower_end_index, read_index = upper_begin_index, end = lower_end_index + upper_size; write_index < end; ++write_index, ++read_index)
+					{
+						output[write_index] = output[read_index];
+					}
 				}
 			}
 
-			subarray_ends.front() = output_index;
 			operation_initialized.store(false, std::memory_order_relaxed);
 			operation_done.store(true, std::memory_order_release);
 		}();
@@ -74,7 +85,11 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 		}
 		else
 		{
-			join_count.store(std::size_t{}, std::memory_order_relaxed);
+			for(auto& join : joins)
+			{
+				join.store(false, std::memory_order_relaxed);
+			}
+
 			threads_waiting_on_initialized.store(std::size_t{}, std::memory_order_relaxed);
 			operation_done.store(false, std::memory_order_relaxed);
 			operation_initialized.store(true, std::memory_order_release);
@@ -127,10 +142,11 @@ int main(int num_arguments, const char*const*const arguments)
 	{
 		thread.join();
 	}
+	output.resize(size);
 #else
+	auto filtered_end_index = std::size_t{};
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
-	{		
-		auto filtered_end_index = std::size_t{};
+	{
 		for(auto index = std::size_t{}; index < input.size(); ++index)
 		{
 			if(input[index] < filter_max)
@@ -140,9 +156,8 @@ int main(int num_arguments, const char*const*const arguments)
 			}
 		}
 	}
+	output.resize(filtered_end_index);
 #endif
-
-	output.resize(size);
 
 	const auto end_point = std::chrono::steady_clock::now();
 
