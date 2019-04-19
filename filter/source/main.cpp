@@ -198,9 +198,10 @@ int main(int num_arguments, const char*const*const arguments)
 	}
 	output.resize(size);
 #else
-	auto filtered_end_index = std::size_t{};
+	auto final_size = std::size_t{};
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
 	{
+		auto filtered_end_index = std::size_t{};
 		for(auto index = std::size_t{}; index < input.size(); ++index)
 		{
 			if(input[index] < filter_max)
@@ -209,8 +210,9 @@ int main(int num_arguments, const char*const*const arguments)
 				++filtered_end_index;
 			}
 		}
+		final_size = filtered_end_index;
 	}
-	output.resize(filtered_end_index);
+	output.resize(final_size);
 #endif
 
 	const auto end_point = std::chrono::steady_clock::now();
@@ -218,7 +220,15 @@ int main(int num_arguments, const char*const*const arguments)
 	const auto duration = end_point - start_point;
 	const auto time_in_seconds = std::chrono::duration<double>{duration}.count();
 
-	std::cout << "Test has succeeded!\n";
+	std::cout << "Done with: ";
+	if constexpr(sizeof(void*) == 8)
+	{
+		std::cout << "[x64]";
+	}
+#if defined MULTITHREADING
+	std::cout << "[MULTITHREADING]";
+#endif
+	std::cout << '\n';
 	std::cout << "First value: " << output.front() << '\n';
 	std::cout << "Last value: " << output.back() << '\n';
 	std::cout << "Time taken: " << time_in_seconds << "s\n";
