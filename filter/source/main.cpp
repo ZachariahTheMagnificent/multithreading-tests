@@ -6,8 +6,8 @@
 
 using Element = int;
 
-constexpr auto block_num_bytes = std::size_t{64};
-constexpr auto element_block_size = block_num_bytes / sizeof(Element);
+constexpr auto cache_line_size = std::size_t{64};
+constexpr auto element_block_size = cache_line_size / sizeof(Element);
 
 template<typename Type>
 class alignas(64) CacheAlignedAtomic : public std::atomic<Type>
@@ -35,19 +35,18 @@ struct alignas(64) CacheAlignedNumber
 	Type value;
 };
 
-class GenericAllocator
+class ByteAllocator
 {
 public:
-	GenericAllocator()
-	{
-
-	}
+	static constexpr auto maximum_alignment = cache_line_size;
+	
+	ByteAllocator() = default;
 
 	static char* allocate(const std::size_t size) noexcept
 	{
-		const auto block_size = (size + block_num_bytes - 1) / block_num_bytes * block_num_bytes;
+		const auto num_blocks = (size + sizeof(Block) - 1) / sizeof(Block);
 		
-		return reinterpret_cast<char*>(new Block[block_size]);
+		return reinterpret_cast<char*>(new Block[num_blocks]);
 	}
 	static void deallocate(char*const allocation, const std::size_t size) noexcept
 	{
@@ -57,7 +56,7 @@ public:
 private:
 	struct Block
 	{
-		alignas(block_num_bytes) char bytes[block_num_bytes];
+		alignas(cache_line_size) char bytes[cache_line_size];
 	};
 };
 
@@ -65,6 +64,7 @@ template<typename Type>
 class Allocator
 {
 public:
+	static_assert(alignof(Type) <= ByteAllocator::maximum_alignment, "The allocator type's alignment requirement is too damn high!");
 	using value_type = Type;
 
 	Allocator() = default;
@@ -87,11 +87,11 @@ public:
 	
 	Type* allocate(const std::size_t size) noexcept
 	{
-		return reinterpret_cast<Type*>(GenericAllocator::allocate(size));
+		return reinterpret_cast<Type*>(ByteAllocator::allocate(size * sizeof(Type)));
 	}
 	void deallocate(Type*const allocation, const std::size_t size) noexcept
 	{
-		GenericAllocator::deallocate(reinterpret_cast<char*>(allocation), size);
+		ByteAllocator::deallocate(reinterpret_cast<char*>(allocation), size * sizeof(Type));
 	}
 };
 
@@ -100,11 +100,11 @@ using DynamicArray = std::vector<Type, Allocator<Type>>;
 
 auto program = [](const std::size_t num_threads, const std::size_t thread_id, const DynamicArray<Element>& input, DynamicArray<Element>& output, const Element filter_max, const std::size_t num_iterations) -> std::size_t
 {
-	alignas(block_num_bytes) static std::atomic<bool> operation_done;
-	alignas(block_num_bytes) static std::atomic<std::size_t> threads_waiting_on_initialized;
-	alignas(block_num_bytes) static std::atomic<bool> operation_initialized;
-	alignas(block_num_bytes) static DynamicArray<CacheAlignedNumber<std::size_t>> subarray_ends(num_threads);
-	alignas(block_num_bytes) static DynamicArray<CacheAlignedAtomic<bool>> joins(num_threads - 1);
+	alignas(cache_line_size) static std::atomic<bool> operation_done;
+	alignas(cache_line_size) static std::atomic<std::size_t> threads_waiting_on_initialized;
+	alignas(cache_line_size) static std::atomic<bool> operation_initialized;
+	alignas(cache_line_size) static DynamicArray<CacheAlignedNumber<std::size_t>> subarray_ends(num_threads);
+	alignas(cache_line_size) static DynamicArray<CacheAlignedAtomic<bool>> joins(num_threads - 1);
 
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
 	{		
