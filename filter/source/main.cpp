@@ -113,8 +113,6 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 			threads_filled.store(std::size_t{}, std::memory_order_release);
 		}
 
-		const auto lower_id = thread_id - 1;
-
 		auto write_index = std::size_t{};
 		if(thread_id != 0)
 		{
