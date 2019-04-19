@@ -100,91 +100,86 @@ using DynamicArray = std::vector<Type, Allocator<Type>>;
 
 auto program = [](const std::size_t num_threads, const std::size_t thread_id, const DynamicArray<Element>& input, DynamicArray<Element>& output, const Element filter_max, const std::size_t num_iterations) -> std::size_t
 {
-	alignas(cache_line_size) static std::atomic<bool> operation_done;
-	alignas(cache_line_size) static std::atomic<std::size_t> threads_waiting_on_initialized;
-	alignas(cache_line_size) static std::atomic<bool> operation_initialized;
-	alignas(cache_line_size) static DynamicArray<CacheAlignedNumber<std::size_t>> subarray_ends(num_threads);
-	alignas(cache_line_size) static DynamicArray<CacheAlignedAtomic<bool>> joins(num_threads - 1);
+	alignas(cache_line_size) static std::atomic<std::size_t> threads_filled;
+	alignas(cache_line_size) static std::atomic<std::size_t> threads_completed;
+	alignas(cache_line_size) static DynamicArray<CacheAlignedNumber<std::size_t>> subarray_sizes(num_threads - 1);
+	alignas(cache_line_size) static std::size_t final_size;
+
+	const auto num_blocks = (input.size() + element_block_size - 1) / element_block_size;
+	const auto starting_block = (num_blocks * thread_id) / num_threads;
+	const auto ending_block = (num_blocks * (thread_id + 1)) / num_threads;
+	const auto begin_index = starting_block * element_block_size;
+	const auto end_index = std::min(input.size(), ending_block * element_block_size);
+
+	auto temp = DynamicArray<Element>(end_index - begin_index);
 
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
-	{		
-		const auto num_blocks = (input.size() + element_block_size - 1) / element_block_size;
-		const auto starting_block = (num_blocks * thread_id) / num_threads;
-		const auto ending_block = (num_blocks * (thread_id + 1)) / num_threads;
-		const auto begin_index = starting_block * element_block_size;
-		const auto end_index = std::min(input.size(), ending_block * element_block_size);
-
-		auto filtered_end_index = begin_index;
+	{
+		auto filtered_size = std::size_t{};
 		for(auto index = begin_index; index < end_index; ++index)
 		{
 			if(input[index] < filter_max)
 			{
-				output[filtered_end_index] = input[index];
-				++filtered_end_index;
+				temp[filtered_size] = input[index];
+				++filtered_size;
 			}
 		}
 
-		subarray_ends[thread_id] = filtered_end_index;
-		
-		[thread_id, num_threads, &input, &output, num_blocks]
+		// If we are not the last thread.
+		if(thread_id != num_threads - 1)
 		{
-			for(auto pair_size = std::size_t{2}, displacement = std::size_t{}; (num_threads + pair_size/2 - 1) / pair_size != 0; displacement += (num_threads + pair_size/2 - 1) / pair_size, pair_size *= 2)
-			{
-				const auto pair_index = thread_id / pair_size;
-				const auto lower_id = pair_index * pair_size;
-				const auto upper_id = lower_id + pair_size/2;
-				
-				if(upper_id < num_threads)
-				{
-					const auto join_flag_id = displacement + pair_index;
-
-					// if we don't join
-					if(!joins[join_flag_id].exchange(true, std::memory_order_acq_rel))
-					{
-						while(!operation_done.load(std::memory_order_acquire))
-						{
-						}
-						return;
-					}
-
-					const auto lower_end_index = subarray_ends[lower_id].value;
-					const auto upper_starting_block = (num_blocks * upper_id) / num_threads;
-					const auto upper_begin_index = upper_starting_block * element_block_size;
-					const auto upper_end_index = subarray_ends[upper_id].value;
-					const auto upper_size = upper_end_index - upper_begin_index;
-					subarray_ends[lower_id] = lower_end_index + upper_size;
-					for(auto write_index = lower_end_index, read_index = upper_begin_index, end = lower_end_index + upper_size; write_index < end; ++write_index, ++read_index)
-					{
-						output[write_index] = output[read_index];
-					}
-				}
-			}
-
-			operation_initialized.store(false, std::memory_order_relaxed);
-			operation_done.store(true, std::memory_order_release);
-		}();
+			subarray_sizes[thread_id] = filtered_size;
+		}
 		
-		// If we are not the last one to exit the operation.
-		if(threads_waiting_on_initialized.fetch_add(1, std::memory_order_relaxed) != num_threads - 1)
+		// If we are not the last thread to finish filling our buffer.
+		if(threads_filled.fetch_add(1, std::memory_order_acq_rel) != num_threads - 1)
 		{
-			while(!operation_initialized.load(std::memory_order_acquire))
+			while(threads_filled.load(std::memory_order_acquire) != 0)
 			{
-
 			}
 		}
 		else
 		{
-			for(auto& join : joins)
+			threads_filled.store(std::size_t{}, std::memory_order_release);
+		}
+
+		const auto lower_id = thread_id - 1;
+
+		auto write_index = std::size_t{};
+		if(thread_id != 0)
+		{
+			write_index = subarray_sizes[0];
+			for(auto subarray_size_id = std::size_t{1}; subarray_size_id < thread_id; ++subarray_size_id)
 			{
-				join.store(false, std::memory_order_relaxed);
+				write_index += subarray_sizes[subarray_size_id];
 			}
 
-			threads_waiting_on_initialized.store(std::size_t{}, std::memory_order_relaxed);
-			operation_done.store(false, std::memory_order_relaxed);
-			operation_initialized.store(true, std::memory_order_release);
+			// If we are the last thread.
+			if(thread_id == num_threads - 1)
+			{
+				final_size = write_index + filtered_size;
+			}
+		}
+
+		for(auto read_index = std::size_t{}; read_index < filtered_size; ++write_index, ++read_index)
+		{
+			output[write_index] = temp[read_index];
+		}
+		
+		// If we are not the last one to exit the operation.
+		if(threads_completed.fetch_add(1, std::memory_order_acq_rel) != num_threads - 1)
+		{
+			while(threads_completed.load(std::memory_order_acquire) != 0)
+			{
+			}
+		}
+		else
+		{
+			threads_completed.store(std::size_t{}, std::memory_order_release);
 		}
 	}
-	return subarray_ends.front();
+
+	return final_size;
 };
 
 int main(int num_arguments, const char*const*const arguments)
