@@ -7,33 +7,6 @@
 using Element = int;
 
 constexpr auto cache_line_size = std::size_t{64};
-constexpr auto element_block_size = cache_line_size / sizeof(Element);
-
-template<typename Type>
-class alignas(64) CacheAlignedAtomic : public std::atomic<Type>
-{
-
-};
-
-template<typename Type>
-struct alignas(64) CacheAlignedNumber
-{
-	CacheAlignedNumber() = default;
-	constexpr CacheAlignedNumber(const Type value) noexcept : value{value}
-	{
-
-	}
-	constexpr operator Type() const noexcept
-	{
-		return value;
-	}
-	constexpr operator Type&() noexcept
-	{
-		return value;
-	}
-
-	Type value;
-};
 
 class ByteAllocator
 {
@@ -102,14 +75,11 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 {
 	alignas(cache_line_size) static std::atomic<std::size_t> threads_filled;
 	alignas(cache_line_size) static std::atomic<std::size_t> threads_completed;
-	alignas(cache_line_size) static DynamicArray<CacheAlignedNumber<std::size_t>> subarray_sizes(num_threads - 1);
+	alignas(cache_line_size) static DynamicArray<std::size_t> subarray_sizes(num_threads - 1);
 	alignas(cache_line_size) static std::size_t final_size;
 
-	const auto num_blocks = (input.size() + element_block_size - 1) / element_block_size;
-	const auto starting_block = (num_blocks * thread_id) / num_threads;
-	const auto ending_block = (num_blocks * (thread_id + 1)) / num_threads;
-	const auto begin_index = starting_block * element_block_size;
-	const auto end_index = std::min(input.size(), ending_block * element_block_size);
+	const auto begin_index = (input.size()*thread_id) / num_threads;
+	const auto end_index = (input.size()*(thread_id + 1)) / num_threads;
 
 	auto temp = DynamicArray<Element>(end_index - begin_index);
 
