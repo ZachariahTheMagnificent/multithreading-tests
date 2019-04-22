@@ -3,6 +3,8 @@
 #include <mutex>
 #include <atomic>
 #include <iostream>
+#include <algorithm>
+#include <execution>
 
 using Element = int;
 
@@ -188,13 +190,20 @@ int main(int num_arguments, const char*const*const arguments)
 		threads.push_back(std::thread{program, num_threads, index, std::cref(input), std::ref(output), filter_max, num_iterations});
 	}
 
-	const auto size = program(num_threads, num_threads - 1, input, output, filter_max, num_iterations);
+	const auto final_size = program(num_threads, num_threads - 1, input, output, filter_max, num_iterations);
 
 	for(auto& thread : threads)
 	{
 		thread.join();
 	}
-	output.resize(size);
+	output.resize(final_size);
+#elif defined STL
+	auto final_end = output.end();
+	for(auto index = std::size_t{}; index < num_iterations; ++index)
+	{
+		final_end = std::copy_if(std::execution::par_unseq, input.begin(), input.end(), output.begin(), [filter_max](const auto value){return value < filter_max;});
+	}
+	output.erase(final_end, output.end());
 #else
 	auto final_size = std::size_t{};
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
@@ -223,6 +232,9 @@ int main(int num_arguments, const char*const*const arguments)
 	{
 		std::cout << "[x64]";
 	}
+#if defined STL
+	std::cout << "[STL]";
+#endif
 #if defined MULTITHREADING
 	std::cout << "[MULTITHREADING]";
 #endif
