@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.11)
+project(multithreading-merge-sort-test VERSION 1.0.0 DESCRIPTION "A test on a concurrent implementation of a merge-sort algorithm." LANGUAGES CXX)
+
+add_executable(merge-sort-test)
+target_compile_features(merge-sort-test PRIVATE cxx_std_17)
+# target_compile_definitions(merge-sort-test PRIVATE MULTITHREADING)
+target_include_directories(merge-sort-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_sources(merge-sort-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/source/main.cpp")
+
+add_executable(multithreading-merge-sort-test)
+target_compile_features(multithreading-merge-sort-test PRIVATE cxx_std_17)
+target_compile_definitions(multithreading-merge-sort-test PRIVATE MULTITHREADING)
+target_include_directories(multithreading-merge-sort-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_sources(multithreading-merge-sort-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/source/main.cpp")
+
+add_executable(stl-merge-sort-test)
+target_compile_features(stl-merge-sort-test PRIVATE cxx_std_17)
+target_compile_definitions(stl-merge-sort-test PRIVATE STL)
+target_include_directories(stl-merge-sort-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_sources(stl-merge-sort-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/source/main.cpp")
