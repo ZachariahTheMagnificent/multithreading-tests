@@ -85,44 +85,38 @@ auto merge_sort(const Iterator begin, const Sentinel end) -> DynamicArray<std::d
 	if(size > 1)
 	{
 		const auto lower = merge_sort(begin, begin + size/2);
-		const auto higher = merge_sort(begin + size/2, end);
+		const auto upper = merge_sort(begin + size/2, end);
 
 		auto output = DynamicArray<std::decay_t<decltype(*begin)>>(size);
 
 		auto lower_it = lower.begin();
-		auto higher_it = higher.begin();
+		auto upper_it = upper.begin();
 		auto output_it = output.begin();
 
 		const auto lower_end = lower.end();
-		const auto higher_end = higher.end();
+		const auto upper_end = upper.end();
 
-		for(;lower_it != lower_end && higher_it != higher_end; ++output_it)
+		for(;lower_it != lower_end && upper_it != upper_end; ++output_it)
 		{
-			if(*lower_it < *higher_it)
+			if(*lower_it < *upper_it)
 			{
 				*output_it = *lower_it;
 				++lower_it;
 			}
 			else
 			{
-				*output_it = *higher_it;
-				++higher_it;
+				*output_it = *upper_it;
+				++upper_it;
 			}
 		}
 		
-		if(lower_it == lower_end)
+		for(; lower_it != lower_end; ++lower_it, ++output_it)
 		{
-			for(; higher_it != higher_end; ++higher_it, ++output_it)
-			{
-				*output_it = *higher_it;
-			}
+			*output_it = *lower_it;
 		}
-		else if(higher_it == higher_end)
+		for(; upper_it != upper_end; ++upper_it, ++output_it)
 		{
-			for(; lower_it != lower_end; ++lower_it, ++output_it)
-			{
-				*output_it = *lower_it;
-			}
+			*output_it = *upper_it;
 		}
 
 		return output;
