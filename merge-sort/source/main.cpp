@@ -79,22 +79,26 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 };
 
 template<typename Iterator, typename Sentinel>
-auto merge_sort(const Iterator begin, const Sentinel end) -> DynamicArray<std::decay_t<decltype(*begin)>>
+void merge_sort(const Iterator buffer1_begin, const Sentinel buffer1_end, const Iterator buffer2_begin, const Sentinel buffer2_end)
 {
-	const auto size = end - begin;
+	const auto size = buffer1_end - buffer1_begin;
 	if(size > 1)
 	{
-		const auto lower = merge_sort(begin, begin + size/2);
-		const auto upper = merge_sort(begin + size/2, end);
+		const auto lower_begin = buffer1_begin;
+		const auto lower_end = buffer1_begin + size/2;
 
-		auto output = DynamicArray<std::decay_t<decltype(*begin)>>(size);
+		const auto upper_begin = buffer1_begin + size/2;
+		const auto upper_end = buffer1_end;
 
-		auto lower_it = lower.begin();
-		auto upper_it = upper.begin();
-		auto output_it = output.begin();
+		const auto output_begin = buffer2_begin;
+		const auto output_end = buffer2_end;
 
-		const auto lower_end = lower.end();
-		const auto upper_end = upper.end();
+		merge_sort(buffer2_begin, buffer2_begin + size/2, lower_begin, lower_end);
+		merge_sort(buffer2_begin + size/2, buffer2_end, upper_begin, upper_end);
+
+		auto lower_it = lower_begin;
+		auto upper_it = upper_begin;
+		auto output_it = output_begin;
 
 		for(;lower_it != lower_end && upper_it != upper_end; ++output_it)
 		{
@@ -109,7 +113,7 @@ auto merge_sort(const Iterator begin, const Sentinel end) -> DynamicArray<std::d
 				++upper_it;
 			}
 		}
-		
+	
 		for(; lower_it != lower_end; ++lower_it, ++output_it)
 		{
 			*output_it = *lower_it;
@@ -118,12 +122,6 @@ auto merge_sort(const Iterator begin, const Sentinel end) -> DynamicArray<std::d
 		{
 			*output_it = *upper_it;
 		}
-
-		return output;
-	}
-	else
-	{
-		return DynamicArray<std::decay_t<decltype(*begin)>>(begin, end);
 	}
 }
 
@@ -146,13 +144,15 @@ int main(int num_arguments, const char*const*const arguments)
 		input[index] = random_int(rng_engine);
 	}
 
-	auto output = DynamicArray<Element>();
+	auto output = DynamicArray<Element>(input.size());
 
 #if defined MULTITHREADING
 	const std::size_t num_threads = std::thread::hardware_concurrency();
 
 	auto threads = DynamicArray<std::thread>{};
 	threads.reserve(num_threads - 1);
+#elif !defined STL
+	auto temp = input;
 #endif
 
 	std::cout << "Concurrent merge sort test\n";
@@ -179,7 +179,9 @@ int main(int num_arguments, const char*const*const arguments)
 #else
 	for(auto index = std::size_t{}; index < num_iterations; ++index)
 	{
-		output = merge_sort(input.begin(), input.end());
+		temp = input;
+		output = input;
+		merge_sort(temp.begin(), temp.end(), output.begin(), output.end());
 	}
 #endif
 
