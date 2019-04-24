@@ -78,51 +78,50 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 	return DynamicArray<Element>{};
 };
 
-template<typename Iterator, typename Sentinel>
-void merge_sort(const Iterator buffer1_begin, const Sentinel buffer1_end, const Iterator buffer2_begin, const Sentinel buffer2_end)
+void merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output)
 {
-	const auto size = buffer1_end - buffer1_begin;
-	if(size > 1)
+	const auto size = output.size();
+
+	for(auto sub_buffer_size = std::size_t{1}; sub_buffer_size < size; sub_buffer_size = sub_buffer_size + sub_buffer_size)
 	{
-		const auto lower_begin = buffer1_begin;
-		const auto lower_end = buffer1_begin + size/2;
-
-		const auto upper_begin = buffer1_begin + size/2;
-		const auto upper_end = buffer1_end;
-
-		const auto output_begin = buffer2_begin;
-		const auto output_end = buffer2_end;
-
-		merge_sort(buffer2_begin, buffer2_begin + size/2, lower_begin, lower_end);
-		merge_sort(buffer2_begin + size/2, buffer2_end, upper_begin, upper_end);
-
-		auto lower_it = lower_begin;
-		auto upper_it = upper_begin;
-		auto output_it = output_begin;
-
-		for(;lower_it != lower_end && upper_it != upper_end; ++output_it)
+		const auto num_sub_buffers = (size + sub_buffer_size - 1)/sub_buffer_size;
+		for(auto sub_buffer_index = std::size_t{}; sub_buffer_index < num_sub_buffers; sub_buffer_index += 2)
 		{
-			if(*lower_it < *upper_it)
+			const auto lower_begin_index = sub_buffer_size*sub_buffer_index;
+			const auto lower_end_index = std::min(lower_begin_index + sub_buffer_size, size);
+			const auto upper_begin_index = lower_end_index;
+			const auto upper_end_index = std::min(upper_begin_index + sub_buffer_size, size);
+
+			auto lower_index = lower_begin_index;
+			auto upper_index = upper_begin_index;
+			auto output_index = lower_begin_index;
+
+			for(;lower_index != lower_end_index && upper_index != upper_end_index; ++output_index)
 			{
-				*output_it = *lower_it;
-				++lower_it;
+				if(temp[lower_index] < temp[upper_index])
+				{
+					output[output_index] = temp[lower_index];
+					++lower_index;
+				}
+				else
+				{
+					output[output_index] = temp[upper_index];
+					++upper_index;
+				}
 			}
-			else
+		
+			for(; lower_index != lower_end_index; ++lower_index, ++output_index)
 			{
-				*output_it = *upper_it;
-				++upper_it;
+				output[output_index] = temp[lower_index];
+			}
+			for(; upper_index != upper_end_index; ++upper_index, ++output_index)
+			{
+				output[output_index] = temp[upper_index];
 			}
 		}
-	
-		for(; lower_it != lower_end; ++lower_it, ++output_it)
-		{
-			*output_it = *lower_it;
-		}
-		for(; upper_it != upper_end; ++upper_it, ++output_it)
-		{
-			*output_it = *upper_it;
-		}
+		std::swap(temp, output);
 	}
+	std::swap(temp, output);
 }
 
 int main(int num_arguments, const char*const*const arguments)
@@ -181,7 +180,7 @@ int main(int num_arguments, const char*const*const arguments)
 	{
 		temp = input;
 		output = input;
-		merge_sort(temp.begin(), temp.end(), output.begin(), output.end());
+		merge_sort(temp, output);
 	}
 #endif
 
@@ -189,6 +188,10 @@ int main(int num_arguments, const char*const*const arguments)
 
 	const auto duration = end_point - start_point;
 	const auto time_in_seconds = std::chrono::duration<double>{duration}.count();
+
+	auto correct_output = input;
+	std::stable_sort(std::execution::par_unseq, correct_output.begin(), correct_output.end());
+	auto output_is_correct = output == correct_output;
 
 	std::cout << "Done with: ";
 	if constexpr(sizeof(void*) == 8)
@@ -202,8 +205,9 @@ int main(int num_arguments, const char*const*const arguments)
 	std::cout << "[MULTITHREADING]";
 #endif
 	std::cout << '\n';
-	std::cout << "First value: " << output.front() << '\n';
-	std::cout << "Last value: " << output.back() << '\n';
+	std::cout << "Num elements: " << num_elements << '\n';
+	std::cout << "Num iterations: " << num_iterations << '\n';
+	std::cout << "Correct output: " << std::boolalpha << output_is_correct << '\n';
 	std::cout << "Time taken: " << time_in_seconds << "s\n";
 	return EXIT_SUCCESS;
 }
