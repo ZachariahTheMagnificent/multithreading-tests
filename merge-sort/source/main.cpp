@@ -124,6 +124,52 @@ void merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output)
 	std::swap(temp, output);
 }
 
+void n_way_merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output)
+{
+	constexpr auto num_streams = 4;
+	const auto size = output.size();
+
+	for(auto sub_buffer_size = std::size_t{1}; sub_buffer_size < size; sub_buffer_size *= num_streams)
+	{
+		const auto num_sub_buffers = (size + sub_buffer_size - 1)/sub_buffer_size;
+		for(auto sub_buffer_index = std::size_t{}; sub_buffer_index < num_sub_buffers; sub_buffer_index += num_streams)
+		{
+			std::size_t stream_index[num_streams];
+			std::size_t stream_end[num_streams];
+			stream_index[0] = sub_buffer_size*sub_buffer_index;
+			stream_end[0] = std::min(sub_buffer_size*(sub_buffer_index + 1), size);
+			for(auto index = std::size_t{1}; index < num_streams; ++index)
+			{
+				stream_index[index] = stream_end[index - 1];
+				stream_end[index] = std::min(stream_end[index - 1] + sub_buffer_size, size);
+			}
+
+			const auto output_end = std::min(sub_buffer_size*(sub_buffer_index + num_streams), size);
+			for(auto output_index = sub_buffer_size*sub_buffer_index; output_index < output_end; ++output_index)
+			{
+				auto lowest_value = std::numeric_limits<Element>::max();
+				auto lowest_value_stream_index = std::size_t{};
+				for(auto index = std::size_t{0}; index < num_streams; ++index)
+				{
+					if(stream_index[index] < stream_end[index])
+					{
+						if(temp[stream_index[index]] <= lowest_value)
+						{
+							lowest_value_stream_index = index;
+							lowest_value = temp[stream_index[index]];
+						}
+					}
+				}
+
+				output[output_index] = temp[stream_index[lowest_value_stream_index]];
+				++stream_index[lowest_value_stream_index];
+			}
+		}
+		std::swap(temp, output);
+	}
+	std::swap(temp, output);
+}
+
 int main(int num_arguments, const char*const*const arguments)
 {
 	constexpr auto num_elements = std::size_t{1'000'000};
