@@ -78,7 +78,7 @@ auto program = [](const std::size_t num_threads, const std::size_t thread_id, co
 	return DynamicArray<Element>{};
 };
 
-void merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output)
+void merge_sort(DynamicArray<Element>& input, DynamicArray<Element>& output)
 {
 	const auto size = output.size();
 
@@ -98,33 +98,33 @@ void merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output)
 
 			for(;lower_index != lower_end_index && upper_index != upper_end_index; ++output_index)
 			{
-				if(temp[lower_index] < temp[upper_index])
+				if(input[lower_index] < input[upper_index])
 				{
-					output[output_index] = temp[lower_index];
+					output[output_index] = input[lower_index];
 					++lower_index;
 				}
 				else
 				{
-					output[output_index] = temp[upper_index];
+					output[output_index] = input[upper_index];
 					++upper_index;
 				}
 			}
 		
 			for(; lower_index != lower_end_index; ++lower_index, ++output_index)
 			{
-				output[output_index] = temp[lower_index];
+				output[output_index] = input[lower_index];
 			}
 			for(; upper_index != upper_end_index; ++upper_index, ++output_index)
 			{
-				output[output_index] = temp[upper_index];
+				output[output_index] = input[upper_index];
 			}
 		}
-		std::swap(temp, output);
+		std::swap(input, output);
 	}
-	std::swap(temp, output);
+	std::swap(input, output);
 }
 
-void n_way_merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output)
+void n_way_merge_sort(DynamicArray<Element>& input, DynamicArray<Element>& output)
 {
 	constexpr auto num_streams = 4;
 	const auto size = output.size();
@@ -153,21 +153,21 @@ void n_way_merge_sort(DynamicArray<Element>& temp, DynamicArray<Element>& output
 				{
 					if(stream_index[index] < stream_end[index])
 					{
-						if(temp[stream_index[index]] <= lowest_value)
+						if(input[stream_index[index]] <= lowest_value)
 						{
 							lowest_value_stream_index = index;
-							lowest_value = temp[stream_index[index]];
+							lowest_value = input[stream_index[index]];
 						}
 					}
 				}
 
-				output[output_index] = temp[stream_index[lowest_value_stream_index]];
+				output[output_index] = input[stream_index[lowest_value_stream_index]];
 				++stream_index[lowest_value_stream_index];
 			}
 		}
-		std::swap(temp, output);
+		std::swap(input, output);
 	}
-	std::swap(temp, output);
+	std::swap(input, output);
 }
 
 int main(int num_arguments, const char*const*const arguments)
