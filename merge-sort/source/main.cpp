@@ -82,7 +82,7 @@ void merge_sort(DynamicArray<Element>& input, DynamicArray<Element>& output)
 {
 	const auto size = output.size();
 
-	for(auto sub_buffer_size = std::size_t{1}; sub_buffer_size < size; sub_buffer_size = sub_buffer_size + sub_buffer_size)
+	for(auto sub_buffer_size = std::size_t{1}; sub_buffer_size <= size; sub_buffer_size = sub_buffer_size + sub_buffer_size)
 	{
 		const auto num_sub_buffers = (size + sub_buffer_size - 1)/sub_buffer_size;
 		for(auto sub_buffer_index = std::size_t{}; sub_buffer_index < num_sub_buffers; sub_buffer_index += 2)
